@@ -1,5 +1,7 @@
-import RedisClient, { ClusterNode, ClusterOptions, RedisOptions } from 'ioredis'
-import Redlock from 'redlock'
+import RedisClient, {
+  ClusterNode, ClusterOptions, RedisOptions, Cluster as RedisClusterClient,
+} from 'ioredis'
+import Redlock, { CompatibleRedisClient, Lock } from 'redlock'
 import { v4 as uuid } from 'uuid'
 import {
   IncomingMessage,
@@ -20,7 +22,7 @@ import {
 } from '@hocuspocus/server'
 import kleur from 'kleur'
 
-export type RedisInstance = RedisClient.Cluster | RedisClient.Redis
+export type RedisInstance = RedisClient | RedisClusterClient
 
 export interface Configuration {
   /**
@@ -94,7 +96,7 @@ export class Redis implements Extension {
 
   redlock: Redlock
 
-  locks = new Map<string, Redlock.Lock>()
+  locks = new Map<string, Lock>()
 
   logger: Debugger
 
@@ -103,9 +105,6 @@ export class Redis implements Extension {
       ...this.configuration,
       ...configuration,
     }
-
-    // We’ll replace that in the onConfigure hook with the global instance.
-    this.logger = new Debugger()
 
     // Create Redis instance
     const {
@@ -127,12 +126,15 @@ export class Redis implements Extension {
       this.pub = new RedisClient.Cluster(nodes, options)
       this.sub = new RedisClient.Cluster(nodes, options)
     } else {
-      this.pub = new RedisClient(port, host, options)
-      this.sub = new RedisClient(port, host, options)
+      this.pub = new RedisClient(port, host, options as RedisOptions)
+      this.sub = new RedisClient(port, host, options as RedisOptions)
     }
     this.sub.on('pmessageBuffer', this.handleIncomingMessage)
 
-    this.redlock = new Redlock([this.pub])
+    this.redlock = new Redlock([this.pub as unknown as CompatibleRedisClient])
+
+    // We’ll replace that in the onConfigure hook with the global instance.
+    this.logger = new Debugger()
   }
 
   async onConfigure({ instance }: onConfigurePayload) {
@@ -194,7 +196,7 @@ export class Redis implements Extension {
       .createSyncMessage()
       .writeFirstSyncStepFor(document)
 
-    return this.pub.publishBuffer(this.pubKey(documentName), Buffer.from(syncMessage.toUint8Array()))
+    return this.pub.publish(this.pubKey(documentName), Buffer.from(syncMessage.toUint8Array()))
   }
 
   /**
@@ -204,7 +206,7 @@ export class Redis implements Extension {
     const awarenessMessage = new OutgoingMessage(documentName)
       .writeQueryAwareness()
 
-    return this.pub.publishBuffer(
+    return this.pub.publish(
       this.pubKey(documentName),
       Buffer.from(awarenessMessage.toUint8Array()),
     )
@@ -257,7 +259,7 @@ export class Redis implements Extension {
     const message = new OutgoingMessage(documentName)
       .createAwarenessUpdateMessage(awareness, changedClients)
 
-    return this.pub.publishBuffer(
+    return this.pub.publish(
       this.pubKey(documentName),
       Buffer.from(message.toUint8Array()),
     )
@@ -290,7 +292,7 @@ export class Redis implements Extension {
       message,
       this.logger,
     ).apply(document, undefined, reply => {
-      return this.pub.publishBuffer(
+      return this.pub.publish(
         this.pubKey(document.name),
         Buffer.from(reply),
       )
@@ -332,7 +334,7 @@ export class Redis implements Extension {
     const message = new OutgoingMessage(data.documentName)
       .writeBroadcastStateless(data.payload)
 
-    return this.pub.publishBuffer(
+    return this.pub.publish(
       this.pubKey(data.documentName),
       Buffer.from(message.toUint8Array()),
     )
