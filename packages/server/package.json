@@ -33,7 +33,7 @@
     "kleur": "^4.1.4",
     "lib0": "^0.2.47",
     "uuid": "^9.0.0",
-    "ws": "^8.5.0"
+    "ws": "^7.5.10"
   },
   "devDependencies": {
     "@types/async-lock": "^1.1.3",
