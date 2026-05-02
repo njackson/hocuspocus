@@ -28,7 +28,7 @@
   "dependencies": {
     "@hocuspocus/extension-database": "^2.0.6",
     "kleur": "^4.1.4",
-    "sqlite3": "^5.0.11"
+    "sqlite3": "^6.0.1"
   },
   "publishConfig": {
     "access": "public"
